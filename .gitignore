@@ -1,0 +1,15 @@
+# Ignore medical imaging data
+data/
+
+# Ignore build artifacts
+build/
+cmake-build-debug/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+ITKFactoryRegistration/
+
+# OS / editor junk
+.DS_Store
+.idea/
