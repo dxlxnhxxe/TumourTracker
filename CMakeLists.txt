@@ -15,3 +15,7 @@ target_link_libraries(normalize_intensity ${ITK_LIBRARIES})
 # Align organ scan
 add_executable(rigid_register src/rigid_register.cpp)
 target_link_libraries(rigid_register ${ITK_LIBRARIES})
+
+# Check Centroid Alignment
+add_executable(check_centroid_alignment src/check_centroid_alignment.cpp)
+target_link_libraries(check_centroid_alignment ${ITK_LIBRARIES})
