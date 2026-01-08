@@ -33,7 +33,7 @@ The project currently focuses on **brain tumour MRI** using **NIfTI (`.nii`) dat
 - ✅ NIfTI-based image I/O (ITK)  
 - ✅ Isotropic resampling (1 × 1 × 1 mm)  
 - ✅ Intensity normalization (MRI-appropriate)  
-- 🚧 Rigid (6-DOF) registration between timepoints  
+- ✅ Rigid (6-DOF) registration between timepoints  
 - 🚧 Registration validation & metric refinement  
 - 🚧 Deformable (B-spline) registration  
 - 🚧 Tumour segmentation & temporal correspondence  
