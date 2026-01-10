@@ -34,9 +34,30 @@ The project currently focuses on **brain tumour MRI** using **NIfTI (`.nii`) dat
 - ✅ Isotropic resampling (1 × 1 × 1 mm)  
 - ✅ Intensity normalization (MRI-appropriate)  
 - ✅ Rigid (6-DOF) registration between timepoints  
-- 🚧 Registration validation & metric refinement  
-- 🚧 Deformable (B-spline) registration  
-- 🚧 Tumour segmentation & temporal correspondence  
+- ✅ **Deformable registration using B-spline transforms**  
+  - Multi-parameter B-spline transform (order 3)  
+  - LBFGSB optimizer with proper parameter bounds  
+  - Jacobian determinant validation to ensure physically plausible deformation  
+  - Typical Jacobian range observed: ~0.9–1.1 (no folding)  
+  - Subtle but visible improvements in cortex, sulci, and ventricle alignment in ITK-SNAP  
+- 🚧 Multi-resolution refinement (planned)  
+- 🚧 Tumour segmentation (time-aware, seeded)  
+- 🚧 Temporal correspondence of tumour masks  
+
+---
+
+## Visual Validation
+
+After deformable registration, users can check alignment in ITK-SNAP:
+
+1. **Load the fixed image (T0)** as the base layer.  
+2. **Overlay the rigidly aligned moving image (T1_rigid)**.  
+3. **Overlay the deformed moving image (T1_deformed)** with ~50% opacity.  
+4. Inspect:
+   - Cortex and sulci alignment  
+   - Ventricular shapes  
+   - Tumour boundaries (should remain unchanged)  
+5. Look for smooth, subtle deformations without tearing or unnatural folding.
 
 ---
 
@@ -45,7 +66,7 @@ The project currently focuses on **brain tumour MRI** using **NIfTI (`.nii`) dat
 - Longitudinal tumour tracking across multiple timepoints  
 - Quantitative growth metrics:
   - Volume change  
-  - Growth rate  
+  - Growth rate (mm³/day)  
   - Boundary displacement  
   - Shape evolution analysis  
 - Radiologist-grade visualization  
@@ -77,7 +98,7 @@ Users are expected to download datasets independently and place them in a local 
 
 - **Language:** C++  
 - **Core Libraries:**
-  - ITK (image I/O, registration, segmentation)
+  - ITK (image I/O, rigid & deformable registration, segmentation)
   - Eigen (math / linear algebra)
 - **Build System:** CMake  
 - **Visualization (planned):**
@@ -85,3 +106,11 @@ Users are expected to download datasets independently and place them in a local 
   - Qt  
 
 The pipeline operates entirely in **physical coordinate space** and preserves orientation metadata throughout.
+
+---
+
+## Notes for Contributors
+
+- Deformable registration is **currently single-resolution**. Multi-resolution pyramids are planned to improve alignment further.  
+- Jacobian determinants are used as a **sanity check**, not a parameter to constrain the deformation.  
+- Tumour segmentation will later incorporate **time-aware priors** for robust longitudinal tracking.
