@@ -31,9 +31,7 @@ int main(int argc, char* argv[])
     fixedReader->Update();
     regReader->Update();
 
-    // --------------------------------------------------
-    // Threshold to remove background (simple & robust)
-    // --------------------------------------------------
+    //Threshold to remove background (simple & robust)
     using ThreshType =
         itk::BinaryThresholdImageFilter<ImageType, ImageType>;
 
@@ -53,9 +51,7 @@ int main(int argc, char* argv[])
     threshReg->SetOutsideValue(0.0);
     threshReg->Update();
 
-    // --------------------------------------------------
     // Compute moments
-    // --------------------------------------------------
     auto fixedMoments = MomentsType::New();
     fixedMoments->SetImage(threshFixed->GetOutput());
     fixedMoments->Compute();

@@ -36,9 +36,7 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    // --------------------------------------------------
-    // Image type (3D MRI stored as float)
-    // --------------------------------------------------
+    //Image type (3D MRI stored as float)
     using ImageType = itk::Image<float, 3>;
     using ReaderType = itk::ImageFileReader<ImageType>;
 
@@ -62,16 +60,13 @@ int main(int argc, char* argv[])
     ImageType::Pointer fixedImage  = fixedReader->GetOutput();
     ImageType::Pointer movingImage = movingReader->GetOutput();
 
-    // --------------------------------------------------
-    // Rigid transform (3 rotations + 3 translations)
-    // --------------------------------------------------
+    //Rigid transform (3 rotations + 3 translations)
     using TransformType = itk::Euler3DTransform<double>;
     auto transform = TransformType::New();
     transform->SetIdentity();
 
-    // --------------------------------------------------
-    // IMPORTANT: Set center of rotation to image center
-    // --------------------------------------------------
+
+    //Set center of rotation to image center
     ImageType::RegionType region = fixedImage->GetLargestPossibleRegion();
     ImageType::SizeType   size   = region.GetSize();
     ImageType::SpacingType spacing = fixedImage->GetSpacing();
@@ -84,9 +79,7 @@ int main(int argc, char* argv[])
     }
     transform->SetCenter(center);
 
-    // --------------------------------------------------
-    // Metric: Mutual Information (robust for MRI)
-    // --------------------------------------------------
+    //Metric: Mutual Information (robust for MRI)
     using MetricType =
         itk::MattesMutualInformationImageToImageMetricv4<ImageType, ImageType>;
 
@@ -95,9 +88,7 @@ int main(int argc, char* argv[])
     metric->SetUseFixedImageGradientFilter(false);
     metric->SetUseMovingImageGradientFilter(false);
 
-    // --------------------------------------------------
     // Optimizer
-    // --------------------------------------------------
     using OptimizerType =
         itk::RegularStepGradientDescentOptimizerv4<double>;
 
@@ -106,10 +97,8 @@ int main(int argc, char* argv[])
     optimizer->SetMinimumStepLength(0.01);
     optimizer->SetNumberOfIterations(200);
 
-    // --------------------------------------------------
-    // IMPORTANT: Parameter scaling
-    // Rotations (radians) vs translations (mm)
-    // --------------------------------------------------
+    //Parameter scaling
+    //Rotations (radians) vs translations (mm)
     OptimizerType::ScalesType scales(transform->GetNumberOfParameters());
     scales[0] = 1.0;          // rot X
     scales[1] = 1.0;          // rot Y
@@ -119,9 +108,7 @@ int main(int argc, char* argv[])
     scales[5] = 1.0 / 1000.0; // trans Z
     optimizer->SetScales(scales);
 
-    // --------------------------------------------------
     // Registration setup
-    // --------------------------------------------------
     using RegistrationType =
         itk::ImageRegistrationMethodv4<ImageType, ImageType>;
 
@@ -144,9 +131,7 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    // --------------------------------------------------
     // Resample moving image using optimized transform
-    // --------------------------------------------------
     using ResampleFilterType =
         itk::ResampleImageFilter<ImageType, ImageType>;
 
@@ -158,9 +143,7 @@ int main(int argc, char* argv[])
     resampler->SetInterpolator(
         itk::LinearInterpolateImageFunction<ImageType, double>::New());
 
-    // --------------------------------------------------
     // Write output
-    // --------------------------------------------------
     using WriterType = itk::ImageFileWriter<ImageType>;
     auto writer = WriterType::New();
     writer->SetFileName(argv[3]);
