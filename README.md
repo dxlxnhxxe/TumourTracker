@@ -1,7 +1,7 @@
 # TumourTracker  
 **Longitudinal Tumour Evaluation from Multi-Timepoint MRI (NIfTI)**
 
-TumourTracker is a medical imaging project focused on **longitudinal tumour tracking and quantitative evaluation** using multi-timepoint MRI data.  
+TumourTracker is a medical imaging project focused on longitudinal tumour tracking and quantitative evaluation using multi-timepoint MRI data.  
 The goal is to move beyond static segmentation and towards **physically consistent tumour tracking across time**.
 
 This project is under active development, extensible, and open to collaboration.
@@ -90,8 +90,6 @@ The project is developed using publicly available datasets from:
 Dataset page:  
 https://www.cancerimagingarchive.net/collection/cfb-gbm/
 
-Users are expected to download datasets independently and place them in a local `data/` directory, which is intentionally excluded from version control.
-
 ---
 
 ## Technology Stack
@@ -105,12 +103,12 @@ Users are expected to download datasets independently and place them in a local 
   - VTK
   - Qt  
 
-The pipeline operates entirely in **physical coordinate space** and preserves orientation metadata throughout.
+The pipeline operates in **physical coordinate space** and preserves orientation metadata.
 
 ---
 
 ## Notes for Contributors
 
-- Deformable registration is **currently single-resolution**. Multi-resolution pyramids are planned to improve alignment further.  
-- Jacobian determinants are used as a **sanity check**, not a parameter to constrain the deformation.  
-- Tumour segmentation will later incorporate **time-aware priors** for robust longitudinal tracking.
+- Deformable registration is currently single-resolution. Multi-resolution pyramids are planned to improve alignment further.  
+- Jacobian determinants are used for verification, not as a parameter to constrain the deformation. 
+- Tumour segmentation will later incorporate time-aware priors for robust longitudinal tracking.
