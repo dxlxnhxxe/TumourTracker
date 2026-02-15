@@ -11,7 +11,7 @@
 int main (int argc, char *argv[]){
   if(argc < 3){
     std::cerr << "Usage: " << argv[0]
-              << " <input_resampled.nii.gz> <outpput_normalized.nii.gz>"
+              << " <input_resampled.nii> <output_normalized.nii>"
               << std::endl;
         return EXIT_FAILURE;
   }

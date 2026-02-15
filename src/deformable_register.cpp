@@ -1,280 +1,222 @@
 //
-// Created by Dylan Haye on 08/01/2026.
+// Created by Dylan Haye
+// Corrected Multi-Resolution BSpline (ITK 5.4.5)
 //
 
+#include <itkVersion.h>
 #include <iostream>
+#include <vector>
+
 #include <itkImage.h>
 #include <itkImageFileReader.h>
 #include <itkImageFileWriter.h>
 #include <itkResampleImageFilter.h>
+
 #include <itkBSplineTransform.h>
+#include <itkBSplineTransformInitializer.h>
+#include <itkBSplineTransformParametersAdaptor.h>
+
 #include <itkLBFGSBOptimizerv4.h>
+#include <itkLBFGSOptimizerv4.h>
 #include <itkImageRegistrationMethodv4.h>
 #include <itkMattesMutualInformationImageToImageMetricv4.h>
 #include <itkLinearInterpolateImageFunction.h>
-#include <itkBSplineTransformInitializer.h>
+
 #include <itkTransformToDisplacementFieldFilter.h>
 #include <itkDisplacementFieldJacobianDeterminantFilter.h>
 #include <itkStatisticsImageFilter.h>
 
-//deal with arguments/command line
-int main (int argc, char* argv[]) {
-    if (argc < 4) {
-        std::cerr << "Usage:" << argv[0]
-                              << " <fixed_T0> <moving_T1> <output_deformed.nii>\n>";
+int main(int argc, char* argv[])
+{
+    if (argc < 4)
+    {
+        std::cerr << "Usage: "
+                  << argv[0]
+                  << " <fixed> <moving> <output>\n";
         return EXIT_FAILURE;
     }
 
-    //typdef the itkImage
+    std::cout << "ITK Version: "
+              << itk::Version::GetITKVersion()
+              << std::endl;
+
     using ImageType = itk::Image<float, 3>;
     using ReaderType = itk::ImageFileReader<ImageType>;
 
-    //instanciate 2 new readertypes
-    auto fixedReader = ReaderType::New();
+    auto fixedReader  = ReaderType::New();
     auto movingReader = ReaderType::New();
 
-    //set them as arguments 1 and 2
     fixedReader->SetFileName(argv[1]);
     movingReader->SetFileName(argv[2]);
 
-    //trigger the reading process using the Update() method within a try block
-    try {
-        fixedReader->Update();
-        movingReader->Update();
-    } catch (const itk::ExceptionObject &err) {
-        std::cerr << "Error reading images: " <<err << std::endl;
-        return EXIT_FAILURE;
-    }
+    fixedReader->Update();
+    movingReader->Update();
 
-    //Pass the output of the reader directly into the inputs of the writer (ImageType::Pointer) using GetOutput() method
-    //and name them fixedImage and movingImage
-    ImageType::Pointer fixedImage = fixedReader->GetOutput();
-    ImageType::Pointer movingImage = movingReader->GetOutput();
+    auto fixedImage  = fixedReader->GetOutput();
+    auto movingImage = movingReader->GetOutput();
 
-    //-
-    //B-spline deformable setup
-    //-
+    // =====================================================
+    // BSpline Transform
+    // =====================================================
 
-    //Typedef Bspline (itk::BSplineTransform<TScalar, NDimensions, SplineOrder> as TransformType
     using TransformType = itk::BSplineTransform<double, 3, 3>;
-    // create a new instance of TransformType
     auto transform = TransformType::New();
 
-    // The BSplineTransformInitializer helps define the physical domain
-    // (size, origin, spacing) of the B-spline grid based on an image
-    using InitializerType = itk::BSplineTransformInitializer<TransformType, ImageType>;
+    using InitializerType =
+        itk::BSplineTransformInitializer<TransformType, ImageType>;
 
-    // Create a new initializer instance
-    InitializerType::Pointer initializer = InitializerType::New();
-
-    // Tell the initializer which transform we are initializing
+    auto initializer = InitializerType::New();
     initializer->SetTransform(transform);
-
-    // Tell the initializer which image defines the physical space
-    // (we always use the fixed image as reference)
     initializer->SetImage(fixedImage);
 
-
-    // Define how coarse the B-spline grid is
-    // This is not voxel size — this is control point spacing
-    // Small number = coarse deformation (safe, prevents overfitting)
-    // 5 control points per dimension
+    // COARSE INITIAL GRID
     TransformType::MeshSizeType meshSize;
-    meshSize.Fill(5);
-
-    // Apply the mesh size to the initializer
+    meshSize.Fill(4);  // coarse start
     initializer->SetTransformDomainMeshSize(meshSize);
-
-    // Actually initialize the transform domain
     initializer->InitializeTransform();
 
-    //-
-    // Metric (how similarity between images is measured)
-    //-
+    // =====================================================
+    // Metric
+    // =====================================================
 
-    // Mutual Information is robust for MRI and multi-timepoint data
-    using MetricType = itk::MattesMutualInformationImageToImageMetricv4<ImageType, ImageType>;
+    using MetricType =
+        itk::MattesMutualInformationImageToImageMetricv4<ImageType, ImageType>;
 
-    // Create the metric
     auto metric = MetricType::New();
-
-    // Number of histogram bins used to estimate probability distributions
     metric->SetNumberOfHistogramBins(50);
-
-    // Disable gradient filters (faster, more stable for MRI)
     metric->SetUseMovingImageGradientFilter(false);
     metric->SetUseFixedImageGradientFilter(false);
 
-    //-
-    // Optimizer (how parameters are updated)
-    //-
+    // =====================================================
+    // Optimizer
+    // =====================================================
 
-    // LBFGSB is suited for large parameter spaces
-    using OptimizerType = itk::LBFGSBOptimizerv4;
-
-    // Create optimizer
+    //using OptimizerType = itk::LBFGSBOptimizerv4;
+    using OptimizerType = itk::LBFGSOptimizerv4;
     auto optimizer = OptimizerType::New();
 
+    optimizer->SetGradientConvergenceTolerance(1e-5);
+    // optimizer->SetNumberOfIterations(100);
+    // optimizer->SetMaximumNumberOfFunctionEvaluations(500);
+    optimizer->SetNumberOfIterations(30);
+    optimizer->SetMaximumNumberOfFunctionEvaluations(100);
 
-    // Stop when gradient change is small
-    optimizer->SetGradientConvergenceTolerance(1e-4);
+    // IMPORTANT:
+    // Do NOT pre-size bounds based on parameter count.
+    // ITK will resize parameters between levels.
 
-    // Maximum number of optimization iterations
-    optimizer->SetNumberOfIterations(200);
+    // =====================================================
+    // Registration
+    // =====================================================
 
-    // Safety limit on cost function evaluations
-    optimizer->SetMaximumNumberOfFunctionEvaluations(500);
+    using RegistrationType =
+        itk::ImageRegistrationMethodv4<ImageType, ImageType>;
 
-    const unsigned int numberOfParameters = transform->GetNumberOfParameters();
-
-    //Bound selection array:
-    //0 = parameter is unbounded
-    OptimizerType::BoundSelectionType boundSelect(numberOfParameters);
-    boundSelect.Fill(0);
-
-    OptimizerType::BoundValueType lowerBound(numberOfParameters);
-    OptimizerType::BoundValueType upperBound(numberOfParameters);
-    lowerBound.Fill(0);
-    upperBound.Fill(0);
-
-    //Assign bounds to optimizer
-    optimizer->SetBoundSelection(boundSelect);
-    optimizer->SetLowerBound(lowerBound);
-    optimizer->SetUpperBound(upperBound);
-
-    //-
-    // Registration framework
-    //-
-
-    // ImageRegistrationMethodv4 orchestrates the process
-    using RegistrationType = itk::ImageRegistrationMethodv4<ImageType, ImageType>;
-
-    // Create registration object
     auto registration = RegistrationType::New();
 
-
-    // Assign fixed and moving images
     registration->SetFixedImage(fixedImage);
     registration->SetMovingImage(movingImage);
 
-    // Assign metric and optimizer
     registration->SetMetric(metric);
     registration->SetOptimizer(optimizer);
-
-    // Use our initialized B-spline transform
     registration->SetInitialTransform(transform);
 
-    // Allow the transform to be modified in-place
     registration->InPlaceOn();
 
-    // Run the registration inside a try/catch
-    try {
+    // ==============================
+    // MULTI-RESOLUTION SETTINGS
+    // ==============================
+
+    // const unsigned int numberOfLevels = 3;
+    const unsigned int numberOfLevels = 2;
+    registration->SetNumberOfLevels(numberOfLevels);
+
+    // Shrink factors + smoothing
+    RegistrationType::ShrinkFactorsArrayType shrinkFactorsPerLevel;
+    RegistrationType::SmoothingSigmasArrayType smoothingSigmasPerLevel;
+
+    shrinkFactorsPerLevel.SetSize(numberOfLevels);
+    smoothingSigmasPerLevel.SetSize(numberOfLevels);
+
+    for (unsigned int level = 0; level < numberOfLevels; ++level)
+    {
+        shrinkFactorsPerLevel[level] = 4 >> level;   // 4,2
+        smoothingSigmasPerLevel[level] = 2 - level;  // 2,1
+    }
+
+    registration->SetShrinkFactorsPerLevel(shrinkFactorsPerLevel);
+    registration->SetSmoothingSigmasPerLevel(smoothingSigmasPerLevel);
+
+    // =====================================================
+    // BSpline Adaptors (CRITICAL PART)
+    // =====================================================
+
+    using TransformAdaptorType =
+        itk::BSplineTransformParametersAdaptor<TransformType>;
+
+    RegistrationType::TransformParametersAdaptorsContainerType adaptors;
+
+    for (unsigned int level = 0; level < numberOfLevels; ++level)
+    {
+        auto adaptor = TransformAdaptorType::New();
+        adaptor->SetTransform(transform);
+
+        TransformType::MeshSizeType levelMesh;
+        // levelMesh.Fill(4 * std::pow(2, level));  // refine grid
+        levelMesh.Fill(3 + level);  // refine grid
+
+        adaptor->SetRequiredTransformDomainMeshSize(levelMesh);
+        adaptor->SetRequiredTransformDomainOrigin(
+            transform->GetTransformDomainOrigin());
+        adaptor->SetRequiredTransformDomainDirection(
+            transform->GetTransformDomainDirection());
+        adaptor->SetRequiredTransformDomainPhysicalDimensions(
+            transform->GetTransformDomainPhysicalDimensions());
+
+        adaptors.push_back(adaptor.GetPointer());
+    }
+
+    registration->SetTransformParametersAdaptorsPerLevel(adaptors);
+
+    // =====================================================
+    // RUN REGISTRATION
+    // =====================================================
+
+    try
+    {
         registration->Update();
-    } catch (itk::ExceptionObject &error) {
-        std::cerr << "Deformable registration failed:\n"
-                  << error << std::endl;
+    }
+    catch (itk::ExceptionObject & err)
+    {
+        std::cerr << "Registration failed:\n"
+                  << err << std::endl;
         return EXIT_FAILURE;
     }
 
-    std::cout << "Deformable registration completed successfully." << std::endl;
+    std::cout << "Multi-resolution deformable registration completed.\n";
 
-    //
-    // Resample moving image using the optimized transform
-    //
+    // =====================================================
+    // RESAMPLE RESULT
+    // =====================================================
 
-    // ResampleImageFilter applies the deformation to the moving image
-    using ResampleFilterType = itk::ResampleImageFilter<ImageType, ImageType>;
+    using ResampleFilterType =
+        itk::ResampleImageFilter<ImageType, ImageType>;
 
-    // Create resampler
     auto resampler = ResampleFilterType::New();
-
-    // Input is the original moving image
     resampler->SetInput(movingImage);
-
-    // Apply the optimized B-spline transform
     resampler->SetTransform(transform);
-
-    // Use fixed image for spacing, origin, direction, size
     resampler->SetReferenceImage(fixedImage);
     resampler->UseReferenceImageOn();
-
-    // Linear interpolation is smooth and fast
-    resampler->SetInterpolator(itk::LinearInterpolateImageFunction<ImageType, double>::New());
-
-    //-
-    // Write output image
-    //-
+    resampler->SetInterpolator(
+        itk::LinearInterpolateImageFunction<ImageType, double>::New());
 
     using WriterType = itk::ImageFileWriter<ImageType>;
     auto writer = WriterType::New();
-
-    // Output filename comes from argv[3]
     writer->SetFileName(argv[3]);
-
-
-    // Write the resampled image
     writer->SetInput(resampler->GetOutput());
+    writer->Update();
 
-    try {
-        writer->Update();
-    } catch (itk::ExceptionObject &error) {
-        std::cerr << "Error writing output image:\n"
-                  <<error << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    //
-    // Jacobian determinant sanity check
-    //
-
-
-    // A displacement field stores per-voxel motion vectors
-    using DisplacementFieldType = itk::Image<itk::Vector<double, 3>, 3>;
-
-    // Convert transform to displacement field
-    using TransformToFieldFilterType = itk::TransformToDisplacementFieldFilter<DisplacementFieldType, double>;
-
-    auto fieldFilter = TransformToFieldFilterType::New();
-    fieldFilter->SetTransform(transform);
-    fieldFilter->SetReferenceImage(fixedImage);
-    fieldFilter->UseReferenceImageOn();
-    fieldFilter->Update();
-
-    // Compute Jacobian determinant of displacement field
-    using JacobianFilterType = itk::DisplacementFieldJacobianDeterminantFilter<DisplacementFieldType, double>;
-
-    auto jacobianFilter = JacobianFilterType::New();
-    jacobianFilter->SetInput(fieldFilter->GetOutput());
-
-    //Define spatial domain for Jacobian image
-    // jacobianFilter->SetReferenceImage(fixedImage);
-    // jacobianFilter->UseReferenceImageOn();
-
-    //Account for physical voxel spacing
-    jacobianFilter->SetUseImageSpacing(true);
-
-    //Run Computation
-    jacobianFilter->Update();
-
-    // Statistics must match the Jacobian image type (double)
-    using JacobianImageType = itk::Image<double, 3>;
-    using StatsFilterType = itk::StatisticsImageFilter<JacobianImageType>;
-
-    auto statsFilter = StatsFilterType::New();
-    statsFilter->SetInput(jacobianFilter->GetOutput());
-    statsFilter->Update();
-
-    // Extract min and max Jacobian values
-    double minJac = statsFilter->GetMinimum();
-    double maxJac = statsFilter->GetMaximum();
-
-
-    std::cout <<"JacobianDeterminant range: [" << minJac << ", " << maxJac << "]" <<std::endl;
-
-    // Non-positive Jacobian means folding (physically invalid deformation)
-    if (minJac <=0.0) {
-        std::cout << "WARNING: Non-Positive Jacobian detected." << std::endl;
-    }
+    std::cout << "Output written.\n";
 
     return EXIT_SUCCESS;
 }
